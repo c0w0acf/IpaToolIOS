@@ -1,0 +1,10 @@
+jobs:
+  build:
+    # Pin to a specific macOS version instead of relying on default queues
+    runs-on: macos-14
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ... existing build steps ...
