@@ -1,0 +1,4 @@
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 60  # Allows up to 60 minutes for runner allocation and build execution
