@@ -1,0 +1,73 @@
+name: Build and Release iOS IPA
+
+on:
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+  push:
+    tags:
+      - 'v*' # Triggers automatically when you push a tag like v1.0.0
+
+jobs:
+  build:
+    runs-on: macos-latest # Uses Apple's native environment for iOS toolchains
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Compile Go Binary for iOS
+        run: |
+          go mod download
+          GOOS=ios GOARCH=arm64 CGO_ENABLED=0 go build -o IpaToolIOS
+
+      - name: Create App Package Structure
+        run: |
+          mkdir -p Payload/IpaToolIOS.app
+          mv IpaToolIOS Payload/IpaToolIOS.app/
+          
+          cat << 'EOF' > Payload/IpaToolIOS.app/Info.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE PLIST PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>IpaToolIOS</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.c0w0acf.IpaToolIOS</string>
+              <key>CFBundleName</key>
+              <string>IpaToolIOS</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>MinimumOSVersion</key>
+              <string>14.0</string>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Zip Payload into .ipa
+        run: |
+          zip -r IpaToolIOS.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IpaToolIOS-Unsigned
+          path: IpaToolIOS.ipa
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          files: IpaToolIOS.ipa
+          tag_name: ${{ github.ref_name || 'latest' }}
+          name: Release ${{ github.ref_name || 'Latest Build' }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
