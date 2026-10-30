@@ -1,80 +1,47 @@
-name: Build and Release iOS IPA
+name: Build & Package Unsigned IPA
 
 on:
-  workflow_dispatch: # Allows manual trigger from the Actions tab
   push:
-    tags:
-      - 'v*' # Triggers automatically when you push a tag like v1.0.0
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
-    runs-on: macos-latest # Uses Apple's native environment for iOS toolchains
-
+    runs-on: macos-14
     steps:
-      # 1. Checkout repository source code
-      - name: Checkout Code
+      - name: Checkout Source
         uses: actions/checkout@v4
 
-      # 2. Set up Go environment
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22' # Update to match your project's Go version if needed
+      - name: Setup Xcode Selection
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
 
-      # 3. Install Go dependencies and compile for iOS ARM64
-      - name: Compile Go Binary for iOS
+      - name: Compile Application
         run: |
-          go mod download
-          GOOS=ios GOARCH=arm64 CGO_ENABLED=0 go build -o IpaToolIOS
+          xcodebuild clean build \
+            -project MyApp.xcodeproj \
+            -target MyApp \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CONFIGURATION_BUILD_DIR=build/Release-iphoneos
 
-      # 4. Assemble the iOS App Bundle Payload
-      - name: Create App Package Structure
+      - name: Package Payload Directory
         run: |
-          mkdir -p Payload/IpaToolIOS.app
-          mv IpaToolIOS Payload/IpaToolIOS.app/
-          
-          # Create Info.plist inside the app bundle
-          cat << 'EOF' > Payload/IpaToolIOS.app/Info.plist
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE PLIST PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>CFBundleExecutable</key>
-              <string>IpaToolIOS</string>
-              <key>CFBundleIdentifier</key>
-              <string>com.c0w0acf.IpaToolIOS</string>
-              <key>CFBundleName</key>
-              <string>IpaToolIOS</string>
-              <key>CFBundlePackageType</key>
-              <string>APPL</string>
-              <key>CFBundleShortVersionString</key>
-              <string>1.0</string>
-              <key>MinimumOSVersion</key>
-              <string>14.0</string>
-          </dict>
-          </plist>
-          EOF
+          mkdir -p Payload
+          cp -r build/Release-iphoneos/MyApp.app Payload/
+          zip -qr MyApp.ipa Payload
 
-      # 5. Compress Payload into an IPA file
-      - name: Zip Payload into .ipa
-        run: |
-          zip -r IpaToolIOS.ipa Payload
-
-      # 6. Upload IPA as a workflow artifact (downloadable from the summary page)
-      - name: Upload IPA Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: IpaToolIOS-Unsigned
-          path: IpaToolIOS.ipa
-
-      # 7. Publish to GitHub Releases (runs when triggered by a tag or manual dispatch)
-      - name: Create GitHub Release
+      - name: Publish to Stable Latest Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
-          files: IpaToolIOS.ipa
-          tag_name: ${{ github.ref_name || 'latest' }}
-          name: Release ${{ github.ref_name || 'Latest Build' }}
+          tag_name: latest
+          name: "MyApp Latest CI Build"
+          files: MyApp.ipa
           draft: false
           prerelease: false
         env:
